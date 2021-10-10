@@ -1,0 +1,108 @@
+# Import the libraries 
+%matplotlib notebook
+import pandas as pd 
+import numpy as np 
+import matplotlib.pyplot as plt
+import yfinance as yf
+import scipy.stats as st
+
+def VVWMAP_BT(stock, start, end, period, buy_score, sell_score):
+    df = yf.download(stock, start, end) 
+    
+    df['New Volume'] = df['Volume'] * (df['Close'] - (df['High'] + df['Low'])/2) ** 2
+    df['Price * New Volume'] = df['Close'] * df['New Volume'] 
+    df['VVWMAP'] = df['Price * New Volume'].rolling(period).sum() / df['New Volume'].rolling(period).sum()
+    df['rolling std'] = df['Close'].rolling(period).std()
+    df['Z-Score'] = (df['Close'] - df['VVWMAP']) / df['rolling std']
+    df['Score'] = st.norm.sf(abs(df['Z-Score'])) * 2    
+    df = df.dropna()
+    df = df[['Close','VVWMAP','Score']]
+    
+    df['VVWMAP change'] = df['VVWMAP'].diff(periods = 1)  / df['VVWMAP']
+    df['score change'] = df['Score'].diff()
+    #df['Sell Signal'] = df['VVWMAP change'].apply(lambda x: 100 if x > sell_score else 0)
+    df.loc[(df['score change'] <0) & (df['Score'] < buy_score), 'Buy Signal'] = 100
+    df.loc[(df['score change'] >0) | (df['Score'] > buy_score), 'Buy Signal'] = 0
+    df.loc[(df['score change'] <0) & (df['Score'] < buy_score), 'Buy'] = 'yes'
+    df.loc[(df['score change'] >0) | (df['Score'] > buy_score), 'Buy'] = 'no'
+    
+    
+    df.loc[(df['VVWMAP'] < df['Close']) & (df['VVWMAP change'] > sell_score), 'Sell Signal'] = 100
+    df.loc[(df['VVWMAP'] > df['Close']) | (df['VVWMAP change'] < sell_score), 'Sell Signal'] = 0
+    df.loc[(df['Sell Signal'] == 100), 'Sell'] = 'yes'
+    df.loc[(df['Sell Signal'] != 100), 'Sell'] = 'no'
+    df.dropna()
+    
+    # Trade Strategy
+    PnL = []
+    PnL_pct = []
+    BuySellPrice = []
+    BuyPrice = []
+    SellPrice = []
+    BuyDate = []
+    SellDate = []
+    canbuy = True
+    cansell = False
+    for i in range(len(df)):
+        if df['Buy Signal'].iloc[i-1] == 100 and canbuy == True:
+            buy_value = df['Close'][i]
+            BuySellPrice.append(-buy_value)
+            BuyPrice.append(df['Close'][i])
+            BuyDate.append(df.index[i])
+            canbuy = False
+            cansell = True
+        elif df['Sell Signal'].iloc[i-1] == 100 and cansell == True: # and buy_value < df['Close'][i]:
+            sell_value = df['Close'][i]
+            canbuy = True
+            cansell = False
+            BuySellPrice.append(+sell_value)
+            SellPrice.append(df['Close'][i])
+            PnL.append(sell_value - buy_value)
+            PnL_pct.append(sell_value / buy_value)
+            SellDate.append(df.index[i])
+         
+    # Plot Close Price and Buy/Sell indicators     
+    plt.figure(figsize=(8,6))
+    plt.plot(df['Close'], label = 'Close', color = 'blue' , alpha = 0.5)
+    plt.plot(df['VVWMAP'], label = 'VVWMAP', color = 'purple' , alpha = 0.5)
+    plt.scatter(BuyDate, BuyPrice, color = 'green', label = 'Buy', marker='^',alpha =1)
+    plt.scatter(SellDate, SellPrice, color = 'red', label = 'Sell', marker='v',alpha =1)
+    plt.xticks(rotation = 45)
+    plt.title(stock + ' Close Price & Buy/Sell Signals (' + str(period) + ' Days Rolling Period)')
+    plt.xlabel('Date')
+    plt.ylabel('Close Price USD ($)')
+    plt.legend()
+    plt.show()
+    
+    # Plot Equity curve
+    plt.figure(figsize=(8,4))
+    Equity = np.cumsum(PnL)
+    Equity = np.concatenate(([0], Equity[0:]))
+    plt.plot(Equity)
+    plt.title(stock + ' Equity Curve (' + str(period) + ' Days Rolling Period)')
+    plt.axes().get_xaxis().set_major_locator(plt.MaxNLocator(integer=True))
+    plt.xlim(0,)
+    plt.xlabel('Number of Trade')
+    plt.ylabel('Gain/Loss in USD ($)')
+    plt.show()
+    
+    # Plot % Equity curve
+    plt.figure(figsize=(8,4))
+    Equity_pct = np.cumprod(PnL_pct)
+    Equity_pct = np.concatenate(([1], Equity_pct[0:])) * 100
+    plt.plot(Equity_pct)
+    plt.xlim(0,)
+    plt.ylim(0,)
+    plt.title(stock + ' % Equity Curve (' + str(period) + ' Days Rolling Period)')
+    plt.axes().get_xaxis().set_major_locator(plt.MaxNLocator(integer=True))
+    plt.xlabel('Number of Trade')
+    plt.ylabel('Gain/Loss %')
+    plt.show()
+    
+    print('The gain is ' + str(np.sum(PnL)) + ' USD.')
+    if len(PnL) > 0:
+        print('The win rate is ' + str(len([i for i in PnL if i > 0]) / len(PnL)) +'.')
+    print('The % gain is ' + str(np.sum(Equity_pct[-1])) + ' %.')
+    
+ # Try with stock 
+ VVWMAP_BT('MRNA', "2019-06-01", "2020-12-31",23, 0.2, 0.03)
