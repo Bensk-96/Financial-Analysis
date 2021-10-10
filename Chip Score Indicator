@@ -1,0 +1,62 @@
+# Import the libraries 
+%matplotlib notebook
+import pandas as pd 
+import numpy as np 
+import matplotlib.pyplot as plt
+import yfinance as yf
+import scipy.stats as st
+
+def Chip_Score(stock, start, end, period):
+    
+    # Calculate Chip Score
+    df = yf.download(stock, start, end)
+    df['New Volume'] = df['Volume'] * (df['Close'] - (df['High'] + df['Low'])/2) ** 2
+    # df['New Volume'] = df['Volume'] * (abs(df['Close']- df['Open']) - (df['High'] - df['Low'])) ** 4
+    df['Price * New Volume'] = df['Close'] * df['New Volume'] 
+    df['Chip MA'] = df['Price * New Volume'].rolling(period).sum() / df['New Volume'].rolling(period).sum()
+    df['rolling std'] = df['Close'].rolling(period).std()
+    df['Z-Score'] = (df['Close'] - df['Chip MA']) / df['rolling std']
+    #df['CHIP Score'] = st.norm.pdf(abs(df['Z-Score'])) * 2.5 
+    df['Chip Score'] = st.norm.sf(abs(df['Z-Score'])) * 2
+    df['SW Score'] = (df['Close']) / df['Chip MA'] 
+    df = df.dropna()
+
+    # Visulize the buy/sell signals
+    fig, ax1 = plt.subplots()
+    ax1.tick_params(labelrotation=45)
+
+    color = 'tab:blue'
+    ax1.set_xlabel('Date')
+    ax1.set_ylabel('Close Pirce USD ($)', color=color)
+    ax1.plot(df['Close'], alpha = 0.5, color=color, label = 'Close')
+    ax1.plot(df['Chip MA'] ,alpha = 0.5, color = 'red', label = 'Chip MA')
+    ax1.set_title(stock + ' Close Price & Chip Score (' + str(period) + ' Days Period)')
+    ax1.tick_params(axis='y', labelcolor=color)
+    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+
+    color = 'tab:green'
+    ax2.set_ylabel('Chip MA Score', color=color)  # we already handled the x-label with ax1
+    ax2.plot(df['Chip Score'], alpha = 0.5, color=color,  label = 'Chip Score')
+    #ax2.plot(df['SW Score'] ,alpha = 0.5, color = 'blue', label = 'SW Score')
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    #fig.set_figheight(4.5)
+    #fig.set_figwidth(12.2)
+    fig.tight_layout()  # otherwise the right y-label is slightly clipped
+    fig.legend(loc='lower left', bbox_to_anchor=(0.1, 0.6, 0.5, 0.5)) # bbox_to_anchor=(x, y, width, height)
+    plt.show()  
+    
+def Chip_Score_Compare(stock, start, end):
+    #Chip_Score(stock, start, end, 12)
+    #Chip_Score(stock, start, end, 20)
+    #Chip_Score(stock, start, end, 40)
+    #Chip_Score(stock, start, end, 60)
+    Chip_Score(stock, start, end, 90)
+    Chip_Score(stock, start, end, 120)
+    Chip_Score(stock, start, end, 150)
+    Chip_Score(stock, start, end, 180)
+    
+ # Try with different stocks
+ Chip_Score_Compare('GME' , '2020-01-01', '2021-10-07')
+ Chip_Score_Compare('MRNA' , '2020-01-01', '2021-10-07')
+ Chip_Score_Compare('BNTX' , '2020-01-01', '2021-10-07')
