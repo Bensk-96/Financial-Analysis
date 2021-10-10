@@ -1,0 +1,43 @@
+# Import the libraries 
+%matplotlib notebook
+import pandas as pd 
+import numpy as np 
+import matplotlib.pyplot as plt
+import yfinance as yf
+import scipy.stats as st
+#plt.style.use('fivethirtyeight')
+
+def Chip_MA(stock, start, end, period):
+    
+    # Calculate Chip Score
+    df = yf.download(stock, start, end)
+    df['New Volume'] = df['Volume'] * (df['Close'] - (df['High'] + df['Low'])/2) ** 2
+    #df['New Volume'] = df['Volume'] * (abs(df['Close']- df['Open']) - (df['High'] - df['Low'])) ** 4
+    df['Price * New Volume'] = df['Close'] * df['New Volume'] 
+    df['Chip MA'] = df['Price * New Volume'].rolling(period).sum() / df['New Volume'].rolling(period).sum()
+    df['rolling std'] = df['Close'].rolling(period).std()
+    df['Z-Score'] = (df['Close'] - df['Chip MA']) / df['rolling std']
+    #df['CHIP Score'] = st.norm.pdf(abs(df['Z-Score'])) * 2.5 
+    df['Chip Score'] = st.norm.sf(abs(df['Z-Score'])) * 2
+    df = df.dropna()
+    
+    # Visulize the buy/sell signals
+    plt.figure() #figsize=(12.2,4.5)
+    plt.plot(df['Chip MA'], label = 'Chip MA', alpha = 0.35, color = 'green')
+    plt.plot(df['Close'], label = 'Close Price', alpha = 0.35, color = 'blue')
+    plt.title(stock + ' Close Price & Chip MA (' + str(period) + ' Days Period)')
+    plt.xticks(rotation = 45)
+    plt.xlabel('Date')
+    plt.ylabel('Close Price USD ($)')
+    plt.legend(loc = 'upper left')
+    plt.show()
+    
+def Chip_MA_Compare(stock, start, end):
+    #Chip_Score(stock, start, end, 12)
+    #Chip_Score(stock, start, end, 20)
+    #Chip_Score(stock, start, end, 40)
+    #Chip_Score(stock, start, end, 60)
+    Chip_MA(stock, start, end, 90)
+    Chip_MA(stock, start, end, 120)
+    Chip_MA(stock, start, end, 150)
+    Chip_MA(stock, start, end, 180)
