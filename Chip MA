@@ -41,3 +41,5 @@ def Chip_MA_Compare(stock, start, end):
     Chip_MA(stock, start, end, 120)
     Chip_MA(stock, start, end, 150)
     Chip_MA(stock, start, end, 180)
+    
+    ## Reference: Better Trading, youtube channel
